@@ -55,7 +55,7 @@
       "sizes": "824x1830",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "Hoxe: lo de hoy en tu huerta"
+      "label": "«Hoy»: lo de hoy en tu huerta"
     },
     {
       "src": "capturas/movil-mapa.png",
@@ -69,7 +69,7 @@
       "sizes": "1280x800",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "En la tableta: Hoxe a dos columnas"
+      "label": "En la tableta: «Hoy» a dos columnas"
     }
   ],
   "shortcuts": [

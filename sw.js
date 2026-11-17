@@ -1,4 +1,4 @@
-const VERSION = "2ebebe491772", CACHE = "horta-app";
+const VERSION = "857548eb82ed", CACHE = "horta-app";
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", e => e.waitUntil(self.clients.claim()));
 function sinAncla(u){ const x = new URL(u); x.hash = ""; return x.href; }

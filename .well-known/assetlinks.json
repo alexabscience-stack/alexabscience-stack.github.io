@@ -2,7 +2,7 @@
       "relation": ["delegate_permission/common.handle_all_urls"],
       "target": {
         "namespace": "android_app",
-        "package_name": "app.netlify.a_mina_horta_galega.twa",
-        "sha256_cert_fingerprints": ["9B:AA:59:33:F9:84:91:2E:C3:7A:E5:46:A9:DC:71:FF:19:B8:47:B0:AE:4D:11:AA:BF:82:F7:6A:B3:45:72:F9"]
+        "package_name": "io.github.alexabscience_stack.twa",
+        "sha256_cert_fingerprints": ["9F:BA:02:A9:20:5D:A5:BC:CB:99:75:79:F1:26:76:3A:9B:05:0A:23:87:DD:DD:7A:6B:34:68:8D:A1:27:DE:68"]
       }
     }]

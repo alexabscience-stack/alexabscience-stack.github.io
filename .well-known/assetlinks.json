@@ -1,8 +1,15 @@
-[{
-      "relation": ["delegate_permission/common.handle_all_urls"],
-      "target": {
-        "namespace": "android_app",
-        "package_name": "io.github.alexabscience_stack.twa",
-        "sha256_cert_fingerprints": ["9F:BA:02:A9:20:5D:A5:BC:CB:99:75:79:F1:26:76:3A:9B:05:0A:23:87:DD:DD:7A:6B:34:68:8D:A1:27:DE:68"]
-      }
-    }]
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "io.github.alexabscience_stack.twa",
+      "sha256_cert_fingerprints": [
+        "41:40:3A:80:F5:87:FC:71:BC:17:12:36:D4:2C:9C:B8:AA:9B:F1:15:BC:2D:CA:FD:D2:BF:7C:6B:FD:8E:8D:BD",
+        "9F:BA:02:A9:20:5D:A5:BC:CB:99:75:79:F1:26:76:3A:9B:05:0A:23:87:DD:DD:7A:6B:34:68:8D:A1:27:DE:68"
+      ]
+    }
+  }
+]

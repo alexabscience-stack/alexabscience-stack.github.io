@@ -1,4 +1,4 @@
-const VERSION = "ec5f69479bd1", CACHE = "horta-app-" + VERSION;
+const VERSION = "4d99b71ea211", CACHE = "horta-app-" + VERSION;
 const esCacheApp = n => n === "horta-app" || n.indexOf("horta-app-") === 0;
 const SIN_CACHE = {match:async () => undefined, put:async () => {}, keys:async () => [], delete:async () => false};
 async function miCache(){ return (await caches.has(CACHE)) ? caches.open(CACHE) : SIN_CACHE; }
@@ -12,9 +12,14 @@ async function copiaVieja(c){
 self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then(copiaVieja).catch(() => {})); });
 self.addEventListener("activate", e => e.waitUntil((async () => {
   const viejas = (await caches.keys()).filter(n => esCacheApp(n) && n !== CACHE);
+  const sinAviso = [];
+  try { for (const w of await self.clients.matchAll({type:"window"})) { const k = clavePagina(w.url); let vieja = null;
+      for (const n of viejas) { vieja = await (await caches.open(n)).match(k).catch(() => null) || await (await caches.open(n)).match(k, {ignoreSearch:true}).catch(() => null); if (vieja) break; }
+      if (vieja && !(await verDe(vieja).catch(() => ""))) sinAviso.push(w); } } catch(e) {}
   for (const n of viejas) await caches.delete(n).catch(() => {});
   await self.clients.claim();
   avisaVersion(VERSION);
+  for (const w of sinAviso) { try { if (w.navigate) await w.navigate(w.url); } catch(e) {} }
   if (viejas.length) try { const c = await miCache(); for (const w of await self.clients.matchAll({type:"window"})) { const k = clavePagina(w.url);
     if (new URL(k).origin === self.location.origin && !(await c.match(k))) { const res = await fetch(k, {credentials:"same-origin"}).catch(() => null); if (res && res.ok && res.type === "basic") await c.put(k, await limpia(res)); } } } catch(e) {}
 })()));

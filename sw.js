@@ -1,21 +1,52 @@
-const VERSION = "346d6475595c", CACHE = "horta-app";
-self.addEventListener("install", () => self.skipWaiting());
-self.addEventListener("activate", e => e.waitUntil(self.clients.claim()));
+const VERSION = "93bf8ec3799e", CACHE = "horta-app-" + VERSION;
+const esCacheApp = n => n === "horta-app" || n.indexOf("horta-app-") === 0;
+const SIN_CACHE = {match:async () => undefined, put:async () => {}, keys:async () => [], delete:async () => false};
+async function miCache(){ return (await caches.has(CACHE)) ? caches.open(CACHE) : SIN_CACHE; }
+async function copiaVieja(c){
+  const ns = (await caches.keys()).filter(n => esCacheApp(n) && n !== CACHE), pags = [];
+  for (const n of ns) { const v = await caches.open(n);
+    for (const q of await v.keys()) { if (!(await c.match(q))) { const r = await v.match(q); if (r) await c.put(q, r).catch(() => {}); }
+      if (/(\.html?|\/)$/.test(new URL(q.url).pathname) && !pags.includes(q.url)) pags.push(q.url); } }
+  for (const k of pags) { try { const res = await fetch(k, {cache:"reload", credentials:"same-origin"}); if (res.ok && res.type === "basic") await c.put(k, await limpia(res)); } catch(e) {} }
+}
+self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then(copiaVieja).catch(() => {})); });
+self.addEventListener("activate", e => e.waitUntil((async () => {
+  const viejas = (await caches.keys()).filter(n => esCacheApp(n) && n !== CACHE);
+  for (const n of viejas) await caches.delete(n).catch(() => {});
+  await self.clients.claim();
+  avisaVersion(VERSION);
+  if (viejas.length) try { const c = await miCache(); for (const w of await self.clients.matchAll({type:"window"})) { const k = clavePagina(w.url);
+    if (new URL(k).origin === self.location.origin && !(await c.match(k))) { const res = await fetch(k, {credentials:"same-origin"}).catch(() => null); if (res && res.ok && res.type === "basic") await c.put(k, await limpia(res)); } } } catch(e) {}
+})()));
+async function avisaVersion(ver){ try { (await self.clients.matchAll({type:"window", includeUncontrolled:true})).forEach(w => { try { w.postMessage({tipo:"version-nueva", ver:ver || ""}); } catch(e) {} }); } catch(e) {} }
+async function verDe(res){ try { if (!res || !res.body) return ""; const rd = res.clone().body.getReader(), dec = new TextDecoder(); let s = "";
+  while (s.length < 65536) { const {done, value} = await rd.read(); if (done) break; s += dec.decode(value, {stream:true}); const m = /<meta name="horta-ver" content="([^"]*)"/.exec(s); if (m) { rd.cancel().catch(() => {}); return m[1]; } }
+  rd.cancel().catch(() => {}); } catch(e) {} return ""; }
+self.addEventListener("message", e => { const m = e.data || {}, port = e.ports && e.ports[0];
+  if (m.tipo === "cache") { if (port) port.postMessage({cache:CACHE, ver:VERSION}); return; }
+  if (m.tipo !== "renueva") return;
+  e.waitUntil((async () => { let ok = false, ver = "";
+    try { const c = await miCache(), k = clavePagina(m.url || self.registration.scope), g = (await c.match(k)) || undefined, r = await renueva(c, k, g, true); ok = !!(r && r.ok); ver = await verDe(r); } catch(err) {}
+    if (port) port.postMessage({ok, ver, cache:CACHE}); })()); });
 function sinAncla(u){ const x = new URL(u); x.hash = ""; return x.href; }
 function clavePagina(u){ const x = new URL(u); x.hash = ""; x.search = ""; return x.href; }
 function esPagina(r, u){ return r.mode === "navigate" || r.destination === "document" || /(\.html?|\/)$/.test(u.pathname); }
 async function limpia(res){ if (!res.redirected) return res; return new Response(await res.blob(), {status:res.status, statusText:res.statusText, headers:res.headers}); }
-async function renueva(c, k, guardada){
+async function renueva(c, k, guardada, callado){
   const h = {}, et = guardada && guardada.headers.get("ETag"), lm = guardada && guardada.headers.get("Last-Modified");
   if (et) h["If-None-Match"] = et; else if (lm) h["If-Modified-Since"] = lm;
+  const v0p = guardada && !callado ? c.match(k).then(verDe).catch(() => "") : null;
   const res = await fetch(k, {cache:"no-store", headers:h, credentials:"same-origin"});
   if (res.status === 304 && guardada) return guardada;
-  if (res.ok && res.type === "basic") { const l = await limpia(res); await c.put(k, l.clone()).catch(() => {}); return l; }
+  if (res.ok && res.type === "basic") { const l = await limpia(res); await c.put(k, l.clone()).catch(() => {});
+    if (v0p) { const v1 = await verDe(l), v0 = await v0p, e1 = l.headers.get("ETag");
+      if (v1 && v0 ? v1 !== v0 : (!!et && !!e1 && et !== e1)) avisaVersion(v1); }
+    return l; }
   return res; }
 async function otraPagina(c){ const ks = await c.keys(), k = ks.find(q => /\.html?$|\/$/.test(new URL(q.url).pathname)); return k ? c.match(k) : undefined; }
 function pagina(e, r){
   const k = clavePagina(r.url), recarga = r.cache === "reload" || r.cache === "no-cache" || r.cache === "no-store";
-  return caches.open(CACHE).then(async c => {
+  return miCache().then(async c => {
     const m = (await c.match(k)) || (await c.match(k, {ignoreSearch:true}));
     if (m && !recarga) { e.waitUntil(renueva(c, k, m).catch(() => {})); return m; }
     try {
@@ -32,11 +63,11 @@ self.addEventListener("fetch", e => {
   if (mismo && esPagina(r, u)) e.respondWith(pagina(e, r));
   else if (mismo) {
     e.respondWith(fetch(r).then(res => {
-      if (res && res.ok && res.type === "basic") { const cp = res.clone(); caches.open(CACHE).then(c => c.put(sinAncla(r.url), cp)).catch(() => {}); }
+      if (res && res.ok && res.type === "basic") { const cp = res.clone(); miCache().then(c => c.put(sinAncla(r.url), cp)).catch(() => {}); }
       return res;
-    }).catch(() => caches.open(CACHE).then(async c => (await c.match(sinAncla(r.url), {ignoreSearch:true})) || Response.error())));
+    }).catch(() => miCache().then(async c => (await c.match(sinAncla(r.url), {ignoreSearch:true})) || Response.error())));
   } else if (letras) {
-    e.respondWith(caches.open(CACHE).then(async c => {
+    e.respondWith(miCache().then(async c => {
       const m = await c.match(r), net = fetch(r).then(res => { if (res && (res.ok || res.type === "opaque")) c.put(r, res.clone()).catch(() => {}); return res; }).catch(() => m || Response.error());
       return m || net;
     }));
@@ -108,13 +139,13 @@ async function cvAvisa(c, a, L, hoy, titulo, ruta){
   const man = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"), ico = a.icon || undefined;
   const urg = L.filter(i => i.id === "helada|" + man || (/^helada-\d{4}-\d{2}-\d{2}$/.test(i.id) && i.fecha === hoy)), resto = L.filter(i => !urg.includes(i));
   for (const i of urg) { const f = String(i.id).slice(7), r = i.ruta || "hoxe";
-    await self.registration.showNotification(tx.helada || "A miña horta: esta noche puede helar", {body:es && /tapa (.+)$/.test(i.titulo || "") ? `Tapa ${/tapa (.+)$/.exec(i.titulo)[1]} antes de que oscurezca.` : "• " + i.titulo, tag:"horta-helada-" + f, icon:ico, badge:ico,
+    await self.registration.showNotification(tx.helada || "A miña horta: esta noche puede helar", {body:es && /tapa (.+)$/.test(i.titulo || "") ? `Tapa ${/tapa (.+)$/.exec(i.titulo)[1]} antes de que oscurezca.` : "• " + i.titulo, tag:"horta-helada-" + f, icon:ico, badge:a.badge || undefined,
       data:{url:a.url + "#" + r, ruta:r, cv:{ids:[i.id], riego:[], fecha:hoy}}, actions:cvBotones([{action:"hecho", title:tx.tapado || "Tapado"}])}); }
   if (!resto.length) return;
   const t = es ? cvTitulo(resto) || titulo : (resto.length === 1 ? a.titulo1 : String(a.tituloN || "").replace("{n}", resto.length)), r = resto.length === 1 && resto[0].ruta ? resto[0].ruta : resto.length === L.length ? ruta : "hoxe";
   const riego = resto.filter(i => /^riego\|/.test(i.id)).map(i => { const m = /unos (\d+(?:[.,]\d+)?) litros/.exec(i.titulo || ""); return {id:i.id, bed:String(i.id).split("|")[1], l:Number(i.l) > 0 ? Number(i.l) : m ? Number(m[1].replace(",", ".")) : 0}; });
   const acts = (riego.length ? [{action:"regado", title:tx.regado || "Regado"}] : []).concat(resto.some(i => !/^(pedido\||venta\||reparto-)/.test(i.id)) ? [{action:"hecho", title:tx.hecho || "Hecho"}] : []);
-  await self.registration.showNotification(t, {body:resto.slice(0, 6).map(i => "• " + i.titulo).join("\n"), tag:"horta-hoy-" + hoy, icon:ico, badge:ico,
+  await self.registration.showNotification(t, {body:resto.slice(0, 6).map(i => "• " + i.titulo).join("\n"), tag:"horta-hoy-" + hoy, icon:ico, badge:a.badge || undefined,
     data:{url:a.url + "#" + r, ruta:r, cv:{ids:resto.map(i => i.id), riego, fecha:hoy}}, actions:acts.length ? cvBotones(acts) : undefined});
 }
 async function cvEncola(o){
@@ -137,7 +168,7 @@ async function cvHoraVe(c, L, hoy, env, items){
 async function cvMananaAvisa(c, a, M, hoy){
   const tx = (await avLee(c, "cv-textos.json")) || {}, es = !tx.lang || tx.lang === "es", f = es ? cvTitulo(M) : "", ico = a.icon || undefined;
   const t = f ? "Mañana: " + f.replace(/^Hoy: /, "") : M.length === 1 ? (tx.manana1 || "A miña horta: mañana, una cosa") : String(tx.mananaN || "A miña horta: mañana, {n} cosas").replace("{n}", M.length);
-  await self.registration.showNotification(t, {body:M.slice(0, 6).map(i => "• " + i.titulo).join("\n"), tag:"horta-hoy-" + hoy, icon:ico, badge:ico,
+  await self.registration.showNotification(t, {body:M.slice(0, 6).map(i => "• " + i.titulo).join("\n"), tag:"horta-hoy-" + hoy, icon:ico, badge:a.badge || undefined,
     data:{url:a.url + "#avisos", ruta:"avisos", cv:{ids:[], riego:[], fecha:hoy}}}); }
 const SH_CACHE = "horta-compartido", SH_MAX = 20, SH_DIA = 864e5;
 function shBase(){ return new URL("./", self.registration.scope).href; }
@@ -146,18 +177,20 @@ async function shPurga(c){
   for (const q of ks) { if (!q.url.endsWith("/meta.json")) continue; try { const m = await (await c.match(q)).json(); if (ahora - Number(m.en) < SH_DIA) vale.add(q.url.slice(0, -9)); } catch(e) {} }
   for (const q of ks) { const p = q.url.slice(0, q.url.lastIndexOf("/") + 1); if (!vale.has(p)) await c.delete(q); } }
 async function shRecibe(r){
-  const base = shBase(); let key = "nada";
+  const base = shBase(); let key = "nada", c = null, p = null;
   try {
     const fd = await r.formData(), fs = fd.getAll("fotos").filter(f => f && typeof f === "object" && typeof f.arrayBuffer === "function" && /^image\//i.test(f.type || "")).slice(0, SH_MAX);
     const txt = ["title", "text", "url"].map(k => String(fd.get(k) || "").trim()).filter((v, i, a) => v && a.indexOf(v) === i).join(" ").slice(0, 1000);
     if (fs.length || txt) {
-      const k = Date.now().toString(36) + Math.random().toString(36).slice(2, 10), c = await caches.open(SH_CACHE), p = base + "__compartido/" + k + "/";
+      const k = Date.now().toString(36) + Math.random().toString(36).slice(2, 10); c = await caches.open(SH_CACHE); p = base + "__compartido/" + k + "/";
       await shPurga(c).catch(() => {});
-      await c.put(p + "meta.json", new Response(JSON.stringify({en:Date.now(), n:fs.length, texto:txt, files:fs.map(f => ({name:String(f.name || "").slice(0, 120), type:f.type}))}), {headers:{"Content-Type":"application/json"}}));
       for (let i = 0; i < fs.length; i++) await c.put(p + i, new Response(fs[i], {headers:{"Content-Type":fs[i].type}}));
+      await c.put(p + "meta.json", new Response(JSON.stringify({en:Date.now(), n:fs.length, texto:txt, files:fs.map(f => ({name:String(f.name || "").slice(0, 120), type:f.type}))}), {headers:{"Content-Type":"application/json"}}));
       key = k;
     }
-  } catch(e) { key = "nada"; }
+  } catch(e) {
+    if (c && p) { key = e && e.name === "QuotaExceededError" ? "lleno" : "fallo"; try { for (const q of await c.keys()) if (q.url.startsWith(p)) await c.delete(q); } catch(_) {} }
+    else key = "nada"; }
   return Response.redirect(base + "?compartido=" + key + "#hoxe", 303);
 }
 self.addEventListener("fetch", e => {

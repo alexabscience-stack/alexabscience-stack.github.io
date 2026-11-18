@@ -1,4 +1,4 @@
-const VERSION = "c29e684b025c", CACHE = "horta-app";
+const VERSION = "4e8a104308a6", CACHE = "horta-app";
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", e => e.waitUntil(self.clients.claim()));
 function sinAncla(u){ const x = new URL(u); x.hash = ""; return x.href; }
@@ -139,3 +139,29 @@ async function cvMananaAvisa(c, a, M, hoy){
   const t = f ? "Mañana: " + f.replace(/^Hoy: /, "") : M.length === 1 ? (tx.manana1 || "A miña horta: mañana, una cosa") : String(tx.mananaN || "A miña horta: mañana, {n} cosas").replace("{n}", M.length);
   await self.registration.showNotification(t, {body:M.slice(0, 6).map(i => "• " + i.titulo).join("\n"), tag:"horta-hoy-" + hoy, icon:ico, badge:ico,
     data:{url:a.url + "#avisos", ruta:"avisos", cv:{ids:[], riego:[], fecha:hoy}}}); }
+const SH_CACHE = "horta-compartido", SH_MAX = 20, SH_DIA = 864e5;
+function shBase(){ return new URL("./", self.registration.scope).href; }
+async function shPurga(c){
+  const ks = await c.keys(), vale = new Set(), ahora = Date.now();
+  for (const q of ks) { if (!q.url.endsWith("/meta.json")) continue; try { const m = await (await c.match(q)).json(); if (ahora - Number(m.en) < SH_DIA) vale.add(q.url.slice(0, -9)); } catch(e) {} }
+  for (const q of ks) { const p = q.url.slice(0, q.url.lastIndexOf("/") + 1); if (!vale.has(p)) await c.delete(q); } }
+async function shRecibe(r){
+  const base = shBase(); let key = "nada";
+  try {
+    const fd = await r.formData(), fs = fd.getAll("fotos").filter(f => f && typeof f === "object" && typeof f.arrayBuffer === "function" && /^image\//i.test(f.type || "")).slice(0, SH_MAX);
+    const txt = ["title", "text", "url"].map(k => String(fd.get(k) || "").trim()).filter((v, i, a) => v && a.indexOf(v) === i).join(" ").slice(0, 1000);
+    if (fs.length || txt) {
+      const k = Date.now().toString(36) + Math.random().toString(36).slice(2, 10), c = await caches.open(SH_CACHE), p = base + "__compartido/" + k + "/";
+      await shPurga(c).catch(() => {});
+      await c.put(p + "meta.json", new Response(JSON.stringify({en:Date.now(), n:fs.length, texto:txt, files:fs.map(f => ({name:String(f.name || "").slice(0, 120), type:f.type}))}), {headers:{"Content-Type":"application/json"}}));
+      for (let i = 0; i < fs.length; i++) await c.put(p + i, new Response(fs[i], {headers:{"Content-Type":fs[i].type}}));
+      key = k;
+    }
+  } catch(e) { key = "nada"; }
+  return Response.redirect(base + "?compartido=" + key + "#hoxe", 303);
+}
+self.addEventListener("fetch", e => {
+  const r = e.request; if (r.method !== "POST") return;
+  const u = new URL(r.url); if (u.origin !== self.location.origin || !/\/compartir-foto\/?$/.test(u.pathname)) return;
+  e.respondWith(shRecibe(r));
+});

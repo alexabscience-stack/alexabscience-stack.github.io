@@ -1,4 +1,4 @@
-const VERSION = "93bf8ec3799e", CACHE = "horta-app-" + VERSION;
+const VERSION = "bdd706f786b1", CACHE = "horta-app-" + VERSION;
 const esCacheApp = n => n === "horta-app" || n.indexOf("horta-app-") === 0;
 const SIN_CACHE = {match:async () => undefined, put:async () => {}, keys:async () => [], delete:async () => false};
 async function miCache(){ return (await caches.has(CACHE)) ? caches.open(CACHE) : SIN_CACHE; }
